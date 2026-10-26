@@ -1,0 +1,7 @@
+streetlevel>=0.12
+open_clip_torch>=2.24
+requests>=2.31
+numpy>=1.26
+pillow>=10.0
+# torch with CUDA (NVIDIA GPU) — install first so open_clip doesn't pull the CPU build:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
