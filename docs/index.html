@@ -78,7 +78,7 @@
     <li><b>Map features</b><p>If you name a kind of place (church, gas station, water tower…), OpenStreetMap finds them and the camera is aimed straight at each one.</p></li>
     <li><b>Street scan</b><p>The rest of the budget goes to panoramas spread evenly over the area, each looked at in 6 directions.</p></li>
     <li><b>Ranking</b><p><a href="https://github.com/mlfoundations/open_clip">CLIP</a> (ViT-L/14) scores how well each view matches your description, then rescans densely around the 8 best spots.</p></li>
-    <li><b>Blur check</b><p>The top matches are fetched in high resolution and checked for Google's privacy blur on houses. Small face and plate blurs are ignored.</p></li>
+    <li><b>Blur check</b><p>The top matches, and the views beside them, are checked for Google's privacy blur on houses. Ask for a <i>blurred</i> house and only blurred spots come back, aimed right at the blur.</p></li>
   </ol>
 
   <h2>Install</h2>

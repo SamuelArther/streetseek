@@ -43,7 +43,11 @@ Each search saves `results/<time>-<description>/` with `index.html`, the match p
    description. A second pass rescans densely around the 8 best spots so nothing between scan points is missed.
 6. **Blur check** – the top matches are re-downloaded in higher resolution and checked for a large region that has
    coarse shape but no fine detail, which is what Google's privacy blur on houses looks like. Small face and
-   license-plate blurs are ignored.
+   license-plate blurs and the smudge over Google's own camera car are ignored. The views up to 90° either side
+   are checked too, so a blurred house right next to the match gets flagged with a link to it.
+7. **Asking for blur** – if the description says *blurred* (or *blurry*, *censored*, *pixelated*), that word is
+   kept out of CLIP's text, more matches are checked, each one turns to face the blurred house beside it, and
+   only blurred spots are returned.
 
 ## Good to know
 
@@ -53,7 +57,8 @@ Each search saves `results/<time>-<description>/` with `index.html`, the match p
 - CLIP is good at the overall look but fuzzy on details like *which* thing is red, so the right place is often in
   the top 5 rather than always #1.
 - The blur check was tuned on real Street View photos with a privacy-style blur added (1 miss and 0 false alarms
-  out of 80 test images). It only looks at the matched view, so a blurred house just out of frame isn't counted.
+  out of 80 test images). A blurred house has to reach up past the horizon to count, which is what keeps the
+  camera-car smudge out; a blur that only covers a low fence or a yard is missed.
 - Street View imagery is fetched with the [streetlevel](https://github.com/sk-zk/streetlevel) library, which uses the
   same endpoints as the Google Maps website instead of the paid Street View API. It needs no API key but isn't
   officially supported by Google and could break or be rate limited, so keep searches reasonably small.

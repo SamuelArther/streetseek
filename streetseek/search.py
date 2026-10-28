@@ -1,6 +1,7 @@
 """The search pipeline: area -> candidate panoramas -> rendered views -> CLIP ranking -> blur check."""
 
 import math
+import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
@@ -15,6 +16,9 @@ RESULT_PITCH = 10.0
 BLUR_THRESHOLD = 0.03
 BLUR_CHECK_FOV = 90.0
 BLUR_CHECK_SIZE = (640, 480)
+BLUR_SEARCH_DEPTH = 6  # when blur is asked for, check top_k * this many matches to find enough blurred ones
+BLUR_SWEEP = (0, -30, 30, -60, 60, -90, 90)  # heading offsets checked around each match, nearest first
+BLUR_WORDS = re.compile(r"\b(?:privacy[- ])?(?:blur(?:red|ry)?|censored|pixelated)\b,?\s*", re.I)
 MIN_RESULT_SPACING_M = 50
 FEATURE_MAX_DISTANCE_M = 80
 REFINE_TOP = 8
@@ -44,6 +48,7 @@ class Match:
     blurred: bool
     blur_score: float
     feature_name: str = ""
+    nearby_blur_link: str = ""
     image: object = field(default=None, repr=False)
 
 
@@ -144,6 +149,27 @@ def _render_candidate(cand):
     ]
 
 
+def wants_blur(description):
+    return bool(BLUR_WORDS.search(description))
+
+
+def clip_text(description):
+    """The description without blur words: CLIP can't see privacy blur, the blur check handles that part."""
+    return " ".join(BLUR_WORDS.sub("", description).split()).strip(" ,") or description
+
+
+def blur_sweep(eq, pano, heading):
+    """Blur fraction straight ahead, plus (heading, fraction) aimed at the biggest blur within 90 degrees."""
+    found = []
+    for off in BLUR_SWEEP:
+        view = panos.render_view(eq, pano.heading, heading + off, BLUR_CHECK_FOV, 0.0, size=BLUR_CHECK_SIZE)
+        fraction, center = scoring.blur_blob(view)
+        # turn from the view's middle to the blob's middle (pinhole camera: x = tan(angle))
+        turn = math.degrees(math.atan((center - 0.5) * 2 * math.tan(math.radians(BLUR_CHECK_FOV / 2))))
+        found.append(((heading + off + turn) % 360, fraction))
+    return found[0][1], max(found, key=lambda f: f[1])  # max keeps the nearest offset on ties
+
+
 def search(description, area, radius_m=500, max_panos=120, top_k=5, scorer=None, log=print):
     lat, lon, area_name = geo.geocode(area)
     log(f"Area: {area_name} ({lat:.5f}, {lon:.5f}), radius {radius_m} m")
@@ -153,15 +179,17 @@ def search(description, area, radius_m=500, max_panos=120, top_k=5, scorer=None,
         log("No Street View coverage found in that area")
         return []
 
+    blur_wanted = wants_blur(description)
+    text = clip_text(description) if blur_wanted else description
     scorer = scorer or scoring.Scorer()
     best = {}
     log(f"Downloading and comparing {len(candidates)} panoramas")
-    _score_into(best, candidates, description, scorer)
+    _score_into(best, candidates, text, scorer)
 
     extra = _refine_picks(best, coverage, max(REFINE_MIN, max_panos // 3))
     if extra:
         log(f"Zooming in: {len(extra)} more spots around the best matches")
-        _score_into(best, _to_candidates(extra), description, scorer)
+        _score_into(best, _to_candidates(extra), text, scorer)
 
     picked = []
     for score, cand, heading in sorted(best.values(), key=lambda b: -b[0]):
@@ -169,10 +197,13 @@ def search(description, area, radius_m=500, max_panos=120, top_k=5, scorer=None,
         if any(geo.distance_m(p.lat, p.lon, q.pano.lat, q.pano.lon) < MIN_RESULT_SPACING_M for _, q, _ in picked):
             continue
         picked.append((score, cand, heading))
-        if len(picked) == top_k * 2:
+        if len(picked) == top_k * (BLUR_SEARCH_DEPTH if blur_wanted else 2):
             break
 
-    log("Checking the top matches for privacy blur")
+    if blur_wanted:
+        log(f"Looking for blurred houses among the best {len(picked)} matches (only blurred ones are kept)")
+    else:
+        log("Checking the top matches (and the views beside them) for privacy blur")
     matches = []
     for score, cand, heading in picked:
         if len(matches) == top_k:
@@ -183,9 +214,16 @@ def search(description, area, radius_m=500, max_panos=120, top_k=5, scorer=None,
         except Exception:
             log(f"Couldn't download {p.id}, using the next best match instead")
             continue
+        blur, (side_heading, side_blur) = blur_sweep(eq, p, heading)
+        nearby = ""
+        if side_blur >= BLUR_THRESHOLD and blur < BLUR_THRESHOLD:
+            if blur_wanted:  # they asked for a blurred place: turn to face the blurred house beside the match
+                heading, blur = side_heading, side_blur
+            else:
+                nearby = panos.link(p, side_heading, RESULT_FOV, RESULT_PITCH)
+        if blur_wanted and blur < BLUR_THRESHOLD:
+            continue
         image = panos.render_view(eq, p.heading, heading, RESULT_FOV, RESULT_PITCH, size=RESULT_VIEW_SIZE)
-        level = panos.render_view(eq, p.heading, heading, BLUR_CHECK_FOV, 0.0, size=BLUR_CHECK_SIZE)
-        blur = scoring.blur_fraction(level)
         matches.append(Match(
             rank=len(matches) + 1,
             score=score,
@@ -199,6 +237,10 @@ def search(description, area, radius_m=500, max_panos=120, top_k=5, scorer=None,
             blurred=blur >= BLUR_THRESHOLD,
             blur_score=blur,
             feature_name=cand.feature_name,
+            nearby_blur_link=nearby,
             image=image,
         ))
+    if blur_wanted and len(matches) < top_k:
+        log(f"Only {len(matches)} of the best {len(picked)} matches have a blurred house; "
+            "try a bigger radius or more spots")
     return matches

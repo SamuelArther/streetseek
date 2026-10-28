@@ -49,7 +49,7 @@ CARD = """<div class="card">
   <div class="info">
     <div class="top"><span class="rank">#{rank} &middot; match {score}</span><span class="badge {badge_class}">{badge}</span></div>
     <div class="meta">{place}<br>{lat:.6f}, {lon:.6f} &middot; facing {heading:.0f}&deg; &middot; imagery {date}</div>
-    <a class="go" href="{link}" target="_blank" rel="noopener">Open in Street View</a>
+    <a class="go" href="{link}" target="_blank" rel="noopener">Open in Street View</a>{nearby}
   </div>
 </div>"""
 
@@ -74,6 +74,9 @@ def write(matches, description, area, root="results", home_link=False):
             badge_class="blurred" if m.blurred else "clear",
             place=place, lat=m.lat, lon=m.lon, heading=m.heading,
             date=html.escape(m.date), link=html.escape(m.link),
+            nearby=f'<div class="meta">Blurred house right next to this view: '
+                   f'<a href="{html.escape(m.nearby_blur_link)}" target="_blank" rel="noopener">look at it</a></div>'
+                   if m.nearby_blur_link else "",
         ))
     page = PAGE.format(
         home='<a class="home" href="/">&larr; New search</a>\n' if home_link else "",

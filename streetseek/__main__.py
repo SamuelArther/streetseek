@@ -21,6 +21,8 @@ def run_search(args):
         status = "BLURRED" if m.blurred else "not blurred"
         print(f"#{m.rank}  match {m.score * 100:.1f}  [{status}]  {where}  ({m.date})")
         print(f"    {m.link}")
+        if m.nearby_blur_link:
+            print(f"    blurred house right beside it: {m.nearby_blur_link}")
     folder = report.write(matches, args.description, args.area, root=args.out)
     print(f"\nPhotos and report: {(folder / 'index.html').resolve()}")
 

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 from PIL import Image, ImageFilter
 
-from streetseek import geo, panos, scoring
+from streetseek import geo, panos, scoring, search
 
 
 def textured_scene(seed=0, size=(640, 480)):
@@ -68,12 +68,37 @@ class BlurTests(unittest.TestCase):
     def test_privacy_style_blur_is_detected(self):
         for seed in range(5):
             img = textured_scene(seed)
-            box = (150, 220, 500, 470)
+            box = (150, 180, 500, 400)  # a house: the blur rises past the horizon
             img.paste(img.crop(box).filter(ImageFilter.GaussianBlur(12)), box)
             self.assertGreaterEqual(scoring.blur_fraction(img), 0.03)
 
+    def test_camera_car_smudge_is_ignored(self):
+        for seed in range(5):
+            img = textured_scene(seed)
+            box = (100, 350, 540, 480)  # Google's smear over its own car: big, but all below the horizon
+            img.paste(img.crop(box).filter(ImageFilter.GaussianBlur(12)), box)
+            self.assertLess(scoring.blur_fraction(img), 0.03)
+
     def test_flat_sky_is_ignored(self):
         self.assertEqual(scoring.blur_fraction(Image.new("RGB", (640, 480), (140, 180, 230))), 0)
+
+    def test_blur_words_are_detected_and_kept_from_clip(self):
+        self.assertTrue(search.wants_blur("a blurred white house with a porch"))
+        self.assertTrue(search.wants_blur("white house, Blurry"))
+        self.assertFalse(search.wants_blur("a red brick church"))
+        self.assertEqual(search.clip_text("a blurred white house with a porch"), "a white house with a porch")
+        self.assertEqual(search.clip_text("white house, blurred"), "white house")
+
+    def test_sweep_finds_blurred_house_beside_the_match(self):
+        # Sharp panorama with a privacy-style blur centered 60 degrees right of the matched heading (0).
+        eq = textured_scene(3, size=(2048, 1024))
+        col = int((60 / 360 + 0.5) * 2048)
+        box = (col - 110, 440, col + 110, 640)  # a house: from above the horizon to ~22 degrees down
+        eq.paste(eq.crop(box).filter(ImageFilter.GaussianBlur(12)), box)
+        here, (aim, side) = search.blur_sweep(np.asarray(eq), SimpleNamespace(heading=0.0), 0.0)
+        self.assertLess(here, search.BLUR_THRESHOLD)
+        self.assertAlmostEqual(aim, 60, delta=8)
+        self.assertGreaterEqual(side, search.BLUR_THRESHOLD)
 
 
 if __name__ == "__main__":

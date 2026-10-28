@@ -75,34 +75,48 @@ def blur_map(image, tile=32):
     return flags
 
 
-def largest_blob(flags):
-    """Size of the biggest 4-connected group of flagged tiles."""
+def largest_blob(flags, top_row=None):
+    """Size of the biggest 4-connected group of flagged tiles, and the mean column of its tiles.
+
+    top_row: only count groups that reach up to this row or above. In a level Street View shot a blurred house
+    always rises past the horizon, while the smudge Google leaves over its own camera car stays below it.
+    """
     seen = np.zeros_like(flags)
-    best = 0
+    best, best_col = 0, 0.0
     rows, cols = flags.shape
     for r in range(rows):
         for c in range(cols):
             if not flags[r, c] or seen[r, c]:
                 continue
-            stack, size = [(r, c)], 0
+            stack, size, col_sum, highest = [(r, c)], 0, 0, r
             seen[r, c] = True
             while stack:
                 y, x = stack.pop()
                 size += 1
+                col_sum += x
+                highest = min(highest, y)
                 for ny, nx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
                     if 0 <= ny < rows and 0 <= nx < cols and flags[ny, nx] and not seen[ny, nx]:
                         seen[ny, nx] = True
                         stack.append((ny, nx))
-            best = max(best, size)
-    return best
+            if size > best and (top_row is None or highest <= top_row):
+                best, best_col = size, col_sum / size
+    return best, best_col
+
+
+def blur_blob(image):
+    """(fraction of the view covered by the largest blurred blob, horizontal center of that blob from 0 to 1).
+
+    Only a level (pitch 0) view from just above the horizon down is checked: skipping the upper part keeps
+    smooth clouds and sky gradients from looking like a privacy blur.
+    """
+    w, h = image.size
+    top = int(h * 0.38)
+    flags = blur_map(image.crop((0, top, w, h)), tile=32)
+    size, col = largest_blob(flags, top_row=(h // 2 - top) // 32)  # the row the horizon falls in
+    return size / max(flags.size, 1), (col + 0.5) / max(flags.shape[1], 1)
 
 
 def blur_fraction(image):
-    """Fraction of a level (pitch 0) view, from just above the horizon down, covered by the largest blurred blob.
-
-    Skipping the upper part keeps smooth clouds and sky gradients from looking like a privacy blur.
-    """
-    w, h = image.size
-    region = image.crop((0, int(h * 0.38), w, h))
-    flags = blur_map(region)
-    return largest_blob(flags) / max(flags.size, 1)
+    """Fraction of a level view covered by the largest blurred blob (see blur_blob)."""
+    return blur_blob(image)[0]
