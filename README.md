@@ -15,7 +15,7 @@ The first search downloads the CLIP model (~1.7 GB). An NVIDIA GPU makes it fast
 
 ## Use it
 
-**Web UI:** double-click `streetseek.bat` (or run `python -m streetseek serve`) and open http://127.0.0.1:8765.
+**Web UI:** double-click `streetseek.bat` (or run `python -m streetseek serve --open`). The browser opens http://127.0.0.1:8765 once the server is ready.
 
 **Command line:**
 

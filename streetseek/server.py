@@ -3,6 +3,7 @@
 import json
 import threading
 import uuid
+import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
@@ -157,11 +158,14 @@ def _handler(app):
     return Handler
 
 
-def serve(port=8765, out_dir="results"):
+def serve(port=8765, out_dir="results", open_browser=False):
     app = App(out_dir)
     app.out_dir.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer(("127.0.0.1", port), _handler(app))
-    print(f"Streetseek running at http://127.0.0.1:{port}  (Ctrl+C to stop)")
+    url = f"http://127.0.0.1:{port}"
+    print(f"Streetseek running at {url}  (Ctrl+C to stop)")
+    if open_browser:  # only after the port is bound, so the page never loads before the server is up
+        webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

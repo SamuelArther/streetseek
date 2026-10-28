@@ -38,8 +38,9 @@ def main():
         parser.add_argument("serve")
         parser.add_argument("--port", type=int, default=8765)
         parser.add_argument("--out", default="results")
+        parser.add_argument("--open", action="store_true", help="open the UI in the browser once it's up")
         args = parser.parse_args()
-        server.serve(args.port, args.out)
+        server.serve(args.port, args.out, args.open)
         return
 
     parser = argparse.ArgumentParser(

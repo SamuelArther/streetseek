@@ -1,5 +1,6 @@
 @echo off
-rem Starts the Streetseek web UI and opens it in your browser.
+rem Starts the Streetseek web UI and opens it in your browser once it's ready.
 cd /d "%~dp0"
-start "" http://127.0.0.1:8765
-python -m streetseek serve
+python -m streetseek serve --open
+rem Keep the window open if it crashed so the error can be read.
+if errorlevel 1 pause
